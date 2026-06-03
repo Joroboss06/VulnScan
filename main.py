@@ -12,7 +12,9 @@ import secrets
 from datetime import datetime
 from functools import wraps
 
-app = Flask(__name__)
+
+
+app = Flask(__name__, template_folder='.', static_folder='.')
 app.secret_key = secrets.token_hex(32)
 CORS(app)
 bcrypt = Bcrypt(app)
@@ -525,4 +527,4 @@ if __name__ == '__main__':
     print("    GET  /api/scans/<id>     - Get scan details")
     print("    GET  /api/stats          - Get statistics")
     print("\n" + "="*60 + "\n")
-    app.run(debug=True, port=5000)
+    app.run(host="0.0.0.0", port=10000)
