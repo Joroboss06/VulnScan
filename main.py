@@ -1,6 +1,5 @@
 from flask import Flask, render_template, request, jsonify, session
 from flask_cors import CORS
-from flask_bcrypt import Bcrypt
 import sqlite3
 import json
 import re
@@ -12,34 +11,20 @@ import secrets
 from datetime import datetime
 from functools import wraps
 
-
-
 app = Flask(__name__, template_folder='.', static_folder='.')
 app.secret_key = secrets.token_hex(32)
 CORS(app)
-bcrypt = Bcrypt(app)
 
 DATABASE = 'vulnscan.db'
 
-# Database Setup
+# Database Setup (Authentication tables removed)
 def init_db():
     conn = sqlite3.connect(DATABASE)
     cursor = conn.cursor()
     
     cursor.execute('''
-        CREATE TABLE IF NOT EXISTS users (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            name TEXT NOT NULL,
-            email TEXT UNIQUE NOT NULL,
-            password_hash TEXT NOT NULL,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-    ''')
-    
-    cursor.execute('''
         CREATE TABLE IF NOT EXISTS scans (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id INTEGER,
             url TEXT NOT NULL,
             scan_type TEXT NOT NULL,
             status TEXT DEFAULT 'completed',
@@ -47,8 +32,7 @@ def init_db():
             high_count INTEGER DEFAULT 0,
             medium_count INTEGER DEFAULT 0,
             low_count INTEGER DEFAULT 0,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (user_id) REFERENCES users (id)
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     ''')
     
@@ -59,15 +43,6 @@ def get_db():
     conn = sqlite3.connect(DATABASE)
     conn.row_factory = sqlite3.Row
     return conn
-
-# Auth Decorator
-def login_required(f):
-    @wraps(f)
-    def decorated_function(*args, **kwargs):
-        if 'user_id' not in session:
-            return jsonify({'error': 'Authentication required'}), 401
-        return f(*args, **kwargs)
-    return decorated_function
 
 # Vulnerability Detection Engine
 class VulnerabilityScanner:
@@ -223,7 +198,7 @@ class VulnerabilityScanner:
             (r'Server:\s*([^\r\n]+)', 'Server Version Disclosure'),
             (r'X-Powered-By:\s*([^\r\n]+)', 'Technology Stack Disclosure'),
             (r'PHPSESSID', 'PHP Session ID Exposed'),
-            (r'<!--.*?-->', 'HTML Comments Present')
+            (r'', 'HTML Comments Present')
         ]
         
         for pattern, name in sensitive_patterns:
@@ -278,91 +253,7 @@ class VulnerabilityScanner:
 def health_check():
     return jsonify({'status': 'healthy', 'timestamp': datetime.utcnow().isoformat()})
 
-@app.route('/api/auth/register', methods=['POST'])
-def register():
-    data = request.get_json()
-    
-    if not data or not all(k in data for k in ['name', 'email', 'password']):
-        return jsonify({'error': 'Missing required fields'}), 400
-    
-    name = data['name'].strip()
-    email = data['email'].strip().lower()
-    password = data['password']
-    
-    if len(password) < 8:
-        return jsonify({'error': 'Password must be at least 8 characters'}), 400
-    
-    password_hash = bcrypt.generate_password_hash(password).decode('utf-8')
-    
-    try:
-        conn = get_db()
-        cursor = conn.cursor()
-        cursor.execute(
-            'INSERT INTO users (name, email, password_hash) VALUES (?, ?, ?)',
-            (name, email, password_hash)
-        )
-        conn.commit()
-        user_id = cursor.lastrowid
-        conn.close()
-        
-        session['user_id'] = user_id
-        session['user_email'] = email
-        session['user_name'] = name
-        
-        return jsonify({
-            'message': 'Registration successful',
-            'user': {'id': user_id, 'name': name, 'email': email}
-        }), 201
-        
-    except sqlite3.IntegrityError:
-        return jsonify({'error': 'Email already registered'}), 409
-
-@app.route('/api/auth/login', methods=['POST'])
-def login():
-    data = request.get_json()
-    
-    if not data or not all(k in data for k in ['email', 'password']):
-        return jsonify({'error': 'Missing email or password'}), 400
-    
-    email = data['email'].strip().lower()
-    password = data['password']
-    
-    conn = get_db()
-    cursor = conn.cursor()
-    cursor.execute('SELECT * FROM users WHERE email = ?', (email,))
-    user = cursor.fetchone()
-    conn.close()
-    
-    if user and bcrypt.check_password_hash(user['password_hash'], password):
-        session['user_id'] = user['id']
-        session['user_email'] = user['email']
-        session['user_name'] = user['name']
-        
-        return jsonify({
-            'message': 'Login successful',
-            'user': {'id': user['id'], 'name': user['name'], 'email': user['email']}
-        })
-    
-    return jsonify({'error': 'Invalid credentials'}), 401
-
-@app.route('/api/auth/logout', methods=['POST'])
-def logout():
-    session.clear()
-    return jsonify({'message': 'Logged out successfully'})
-
-@app.route('/api/auth/me', methods=['GET'])
-@login_required
-def get_current_user():
-    return jsonify({
-        'user': {
-            'id': session.get('user_id'),
-            'name': session.get('user_name'),
-            'email': session.get('user_email')
-        }
-    })
-
 @app.route('/api/scan', methods=['POST'])
-@login_required
 def create_scan():
     data = request.get_json()
     
@@ -375,7 +266,7 @@ def create_scan():
     # Validate URL
     url_pattern = re.compile(
         r'^https?://'  # http:// or https://
-        r'(?:(?:[A-Z0-9](?:[A-Z0-9-]{0,61}[A-Z0-9])?\.)+[A-Z]{2,6}\.?|'  # domain
+        r'(?:?:[A-Z0-9](?:[A-Z0-9-]{0,61}[A-Z0-9])?\.)+[A-Z]{2,6}\.?|'  # domain
         r'localhost|'  # localhost
         r'\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})'  # IP
         r'(?::\d+)?'  # optional port
@@ -397,10 +288,9 @@ def create_scan():
     conn = get_db()
     cursor = conn.cursor()
     cursor.execute('''
-        INSERT INTO scans (user_id, url, scan_type, vulnerabilities, high_count, medium_count, low_count)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO scans (url, scan_type, vulnerabilities, high_count, medium_count, low_count)
+        VALUES (?, ?, ?, ?, ?, ?)
     ''', (
-        session['user_id'],
         url,
         scan_type,
         json.dumps(vulnerabilities),
@@ -426,14 +316,13 @@ def create_scan():
     })
 
 @app.route('/api/scans', methods=['GET'])
-@login_required
 def get_scans():
     conn = get_db()
     cursor = conn.cursor()
     cursor.execute('''
         SELECT id, url, scan_type, status, high_count, medium_count, low_count, created_at
-        FROM scans WHERE user_id = ? ORDER BY created_at DESC LIMIT 50
-    ''', (session['user_id'],))
+        FROM scans ORDER BY created_at DESC LIMIT 50
+    ''')
     scans = cursor.fetchall()
     conn.close()
     
@@ -451,13 +340,12 @@ def get_scans():
     })
 
 @app.route('/api/scans/<int:scan_id>', methods=['GET'])
-@login_required
 def get_scan_details(scan_id):
     conn = get_db()
     cursor = conn.cursor()
     cursor.execute('''
-        SELECT * FROM scans WHERE id = ? AND user_id = ?
-    ''', (scan_id, session['user_id']))
+        SELECT * FROM scans WHERE id = ?
+    ''', (scan_id,))
     scan = cursor.fetchone()
     conn.close()
     
@@ -479,12 +367,11 @@ def get_scan_details(scan_id):
     })
 
 @app.route('/api/stats', methods=['GET'])
-@login_required
 def get_stats():
     conn = get_db()
     cursor = conn.cursor()
     
-    cursor.execute('SELECT COUNT(*) as total FROM scans WHERE user_id = ?', (session['user_id'],))
+    cursor.execute('SELECT COUNT(*) as total FROM scans')
     total_scans = cursor.fetchone()['total']
     
     cursor.execute('''
@@ -492,8 +379,8 @@ def get_stats():
             SUM(high_count) as high,
             SUM(medium_count) as medium,
             SUM(low_count) as low
-        FROM scans WHERE user_id = ?
-    ''', (session['user_id'],))
+        FROM scans
+    ''')
     counts = cursor.fetchone()
     conn.close()
     
@@ -517,11 +404,8 @@ if __name__ == '__main__':
     print("\n" + "="*60)
     print("  VulnScan - Web Application Vulnerability Detection System")
     print("="*60)
-    print("\n  Server running at: http://localhost:5000")
+    print("\n  Server running at: http://localhost:10000")
     print("  API endpoints:")
-    print("    POST /api/auth/register  - Register new user")
-    print("    POST /api/auth/login     - Login user")
-    print("    POST /api/auth/logout    - Logout user")
     print("    POST /api/scan           - Start vulnerability scan")
     print("    GET  /api/scans          - Get scan history")
     print("    GET  /api/scans/<id>     - Get scan details")
