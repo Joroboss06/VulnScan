@@ -1,0 +1,1478 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>VulnScan - Web Application Vulnerability Detection</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-primary: #0a0f1a;
+      --bg-secondary: #111827;
+      --bg-card: rgba(17, 24, 39, 0.8);
+      --fg-primary: #f0f4f8;
+      --fg-secondary: #94a3b8;
+      --fg-muted: #64748b;
+      --accent: #00d9ff;
+      --accent-dim: #0891b2;
+      --danger: #ef4444;
+      --warning: #f59e0b;
+      --success: #10b981;
+      --border: rgba(148, 163, 184, 0.1);
+      --glow: rgba(0, 217, 255, 0.15);
+    }
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'Space Grotesk', sans-serif;
+      background: var(--bg-primary);
+      color: var(--fg-primary);
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    .font-mono {
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    /* Background Effects */
+    .bg-grid {
+      background-image: 
+        linear-gradient(rgba(0, 217, 255, 0.03) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(0, 217, 255, 0.03) 1px, transparent 1px);
+      background-size: 50px 50px;
+    }
+
+    .bg-noise {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      opacity: 0.4;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
+      z-index: 0;
+    }
+
+    .glow-orb {
+      position: absolute;
+      border-radius: 50%;
+      filter: blur(80px);
+      pointer-events: none;
+      animation: float 20s ease-in-out infinite;
+    }
+
+    @keyframes float {
+      0%, 100% { transform: translate(0, 0) scale(1); }
+      25% { transform: translate(20px, -30px) scale(1.05); }
+      50% { transform: translate(-10px, 20px) scale(0.95); }
+      75% { transform: translate(30px, 10px) scale(1.02); }
+    }
+
+    /* Page Transitions */
+    .page {
+      display: none;
+      opacity: 0;
+      transform: translateY(20px);
+      transition: opacity 0.4s ease, transform 0.4s ease;
+    }
+
+    .page.active {
+      display: block;
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    /* Staggered Reveal */
+    .reveal {
+      opacity: 0;
+      transform: translateY(30px);
+      transition: opacity 0.6s ease, transform 0.6s ease;
+    }
+
+    .reveal.visible {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    /* Navigation */
+    .nav-link {
+      position: relative;
+      padding: 0.5rem 1rem;
+      color: var(--fg-secondary);
+      transition: color 0.3s ease;
+    }
+
+    .nav-link::after {
+      content: '';
+      position: absolute;
+      bottom: 0;
+      left: 50%;
+      width: 0;
+      height: 2px;
+      background: var(--accent);
+      transition: width 0.3s ease, left 0.3s ease;
+    }
+
+    .nav-link:hover,
+    .nav-link.active {
+      color: var(--accent);
+    }
+
+    .nav-link:hover::after,
+    .nav-link.active::after {
+      width: 100%;
+      left: 0;
+    }
+
+    /* Buttons */
+    .btn-primary {
+      background: linear-gradient(135deg, var(--accent) 0%, var(--accent-dim) 100%);
+      color: var(--bg-primary);
+      font-weight: 600;
+      padding: 0.875rem 2rem;
+      border-radius: 8px;
+      border: none;
+      cursor: pointer;
+      transition: transform 0.2s ease, box-shadow 0.3s ease;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .btn-primary::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(135deg, transparent 0%, rgba(255,255,255,0.2) 50%, transparent 100%);
+      transform: translateX(-100%);
+      transition: transform 0.5s ease;
+    }
+
+    .btn-primary:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 10px 40px var(--glow);
+    }
+
+    .btn-primary:hover::before {
+      transform: translateX(100%);
+    }
+
+    .btn-primary:active {
+      transform: translateY(0);
+    }
+
+    .btn-secondary {
+      background: transparent;
+      color: var(--fg-primary);
+      font-weight: 500;
+      padding: 0.875rem 2rem;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      cursor: pointer;
+      transition: all 0.3s ease;
+    }
+
+    .btn-secondary:hover {
+      border-color: var(--accent);
+      color: var(--accent);
+      background: rgba(0, 217, 255, 0.05);
+    }
+
+    .btn-danger {
+      background: var(--danger);
+      color: white;
+      font-weight: 500;
+      padding: 0.5rem 1rem;
+      border-radius: 6px;
+      border: none;
+      cursor: pointer;
+      transition: all 0.3s ease;
+    }
+
+    .btn-danger:hover {
+      background: #dc2626;
+      transform: translateY(-1px);
+    }
+
+    /* Cards */
+    .card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 1.5rem;
+      backdrop-filter: blur(10px);
+      transition: transform 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease;
+    }
+
+    .card:hover {
+      transform: translateY(-4px);
+      border-color: rgba(0, 217, 255, 0.3);
+      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3), 0 0 60px var(--glow);
+    }
+
+    /* Feature Cards */
+    .feature-card {
+      position: relative;
+      overflow: hidden;
+    }
+
+    .feature-card::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 3px;
+      background: linear-gradient(90deg, transparent, var(--accent), transparent);
+      opacity: 0;
+      transition: opacity 0.3s ease;
+    }
+
+    .feature-card:hover::before {
+      opacity: 1;
+    }
+
+    .feature-icon {
+      width: 48px;
+      height: 48px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: rgba(0, 217, 255, 0.1);
+      border-radius: 12px;
+      margin-bottom: 1rem;
+      transition: background 0.3s ease, transform 0.3s ease;
+    }
+
+    .feature-card:hover .feature-icon {
+      background: rgba(0, 217, 255, 0.2);
+      transform: scale(1.1);
+    }
+
+    /* Input Fields */
+    .input-field {
+      width: 100%;
+      background: rgba(0, 0, 0, 0.3);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 0.875rem 1rem;
+      color: var(--fg-primary);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.9rem;
+      transition: border-color 0.3s ease, box-shadow 0.3s ease;
+    }
+
+    .input-field::placeholder {
+      color: var(--fg-muted);
+    }
+
+    .input-field:focus {
+      outline: none;
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px var(--glow);
+    }
+
+    /* Scan Type Tabs */
+    .scan-type-tab {
+      flex: 1;
+      padding: 1rem;
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--fg-secondary);
+      cursor: pointer;
+      transition: all 0.3s ease;
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 0.9rem;
+    }
+
+    .scan-type-tab:first-child {
+      border-radius: 8px 0 0 8px;
+    }
+
+    .scan-type-tab:last-child {
+      border-radius: 0 8px 8px 0;
+    }
+
+    .scan-type-tab.active {
+      background: rgba(0, 217, 255, 0.1);
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+
+    .scan-type-tab:hover:not(.active) {
+      border-color: var(--fg-muted);
+      color: var(--fg-primary);
+    }
+
+    /* Stats */
+    .stat-card {
+      text-align: center;
+      padding: 2rem;
+    }
+
+    .stat-value {
+      font-size: 2.5rem;
+      font-weight: 700;
+      color: var(--accent);
+      line-height: 1;
+    }
+
+    /* Scanning Animation */
+    .scanning-animation {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(10, 15, 26, 0.95);
+      z-index: 100;
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+    }
+
+    .scanning-animation.active {
+      display: flex;
+    }
+
+    .scan-ring {
+      width: 120px;
+      height: 120px;
+      border-radius: 50%;
+      border: 3px solid var(--border);
+      border-top-color: var(--accent);
+      animation: spin 1s linear infinite;
+      position: relative;
+    }
+
+    .scan-ring::before {
+      content: '';
+      position: absolute;
+      inset: 8px;
+      border-radius: 50%;
+      border: 2px solid var(--border);
+      border-right-color: var(--accent);
+      animation: spin 1.5s linear infinite reverse;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    /* Vulnerability Items */
+    .vuln-item {
+      padding: 1rem;
+      background: rgba(0, 0, 0, 0.2);
+      border-radius: 8px;
+      margin-bottom: 0.5rem;
+      border-left: 3px solid var(--fg-muted);
+      transition: all 0.3s ease;
+      cursor: pointer;
+    }
+
+    .vuln-item:hover {
+      background: rgba(0, 0, 0, 0.4);
+    }
+
+    .vuln-item.high { border-left-color: var(--danger); }
+    .vuln-item.medium { border-left-color: var(--warning); }
+    .vuln-item.low { border-left-color: var(--success); }
+
+    /* Form Cards */
+    .form-card {
+      background: rgba(255, 255, 255, 0.98);
+      border-radius: 20px;
+      padding: 2.5rem;
+      box-shadow: 0 25px 50px rgba(0, 0, 0, 0.5);
+    }
+
+    .form-card .input-field {
+      background: #f1f5f9;
+      border-color: #e2e8f0;
+      color: #1e293b;
+    }
+
+    .form-card .input-field:focus {
+      border-color: var(--accent-dim);
+      box-shadow: 0 0 0 3px rgba(8, 145, 178, 0.2);
+    }
+
+    /* Progress Bar */
+    .progress-bar {
+      height: 4px;
+      background: var(--border);
+      border-radius: 2px;
+      overflow: hidden;
+    }
+
+    .progress-fill {
+      height: 100%;
+      background: linear-gradient(90deg, var(--accent), var(--success));
+      border-radius: 2px;
+      transition: width 0.5s ease;
+    }
+
+    /* Reduced Motion */
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+      }
+    }
+
+    /* Responsive */
+    @media (max-width: 768px) {
+      .mobile-menu {
+        display: block;
+      }
+      
+      .nav-links {
+        display: none;
+        position: absolute;
+        top: 100%;
+        left: 0;
+        right: 0;
+        background: var(--bg-secondary);
+        padding: 1rem;
+        flex-direction: column;
+        border-bottom: 1px solid var(--border);
+      }
+
+      .nav-links.open {
+        display: flex;
+      }
+
+      .stat-value {
+        font-size: 2rem;
+      }
+    }
+  </style>
+</head>
+<body class="bg-grid">
+  <div class="bg-noise"></div>
+  
+  <!-- Glow Orbs -->
+  <div class="glow-orb" style="width: 400px; height: 400px; background: rgba(0, 217, 255, 0.1); top: -100px; right: -100px;"></div>
+  <div class="glow-orb" style="width: 300px; height: 300px; background: rgba(8, 145, 178, 0.08); bottom: 20%; left: -50px; animation-delay: -5s;"></div>
+  <div class="glow-orb" style="width: 250px; height: 250px; background: rgba(16, 185, 129, 0.06); top: 50%; right: 10%; animation-delay: -10s;"></div>
+
+  <!-- Navigation -->
+  <nav class="fixed top-0 left-0 right-0 z-50 bg-opacity-80 backdrop-blur-lg border-b border-[rgba(148,163,184,0.1)]" style="background: rgba(10, 15, 26, 0.9);">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex items-center justify-between h-16">
+        <div class="flex items-center gap-2 cursor-pointer" onclick="showPage('home')">
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2">
+            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+            <path d="M9 12l2 2 4-4"/>
+          </svg>
+          <span class="text-xl font-bold tracking-tight">VulnScan</span>
+        </div>
+        
+        <button class="md:hidden p-2" onclick="toggleMobileMenu()" aria-label="Toggle menu">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M3 12h18M3 6h18M3 18h18"/>
+          </svg>
+        </button>
+
+        <div class="nav-links hidden md:flex items-center gap-1" id="navLinks">
+          <a class="nav-link active" data-page="home" onclick="showPage('home')">Home</a>
+          <a class="nav-link" data-page="scan" onclick="showPage('scan')">Scan</a>
+          <a class="nav-link" data-page="dashboard" onclick="showPage('dashboard')">Dashboard</a>
+          <a class="nav-link" data-page="about" onclick="showPage('about')">About</a>
+          <!--<div class="ml-4 flex gap-2" id="authButtons">
+            <button class="btn-secondary text-sm py-2 px-4" onclick="showPage('signin')">Sign In</button>
+            <button class="btn-primary text-sm py-2 px-4" onclick="showPage('signup')">Sign Up</button>
+          </div>-->
+          <button class="btn-danger text-sm hidden" id="signOutBtn" onclick="handleSignOut()">Sign Out</button>
+        </div>
+      </div>
+    </div>
+  </nav>
+
+  <main class="relative z-10 pt-16">
+    <!-- HOME PAGE -->
+    <section id="page-home" class="page active">
+      <!-- Hero Section -->
+      <div class="min-h-[90vh] flex items-center">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-20">
+          <div class="text-center max-w-4xl mx-auto">
+            <div class="reveal inline-flex items-center gap-2 px-4 py-2 rounded-full border border-[rgba(0,217,255,0.3)] bg-[rgba(0,217,255,0.05)] mb-8" style="transition-delay: 0.1s;">
+              <span class="w-2 h-2 rounded-full bg-[var(--success)] animate-pulse"></span>
+              <span class="text-sm text-[var(--fg-secondary)]">Advanced Security Analysis Engine</span>
+            </div>
+            
+            <h1 class="reveal text-4xl sm:text-5xl lg:text-6xl font-bold leading-tight mb-6" style="transition-delay: 0.2s;">
+              Web Application<br>
+              <span class="text-[var(--accent)]">Vulnerability Detection</span>
+            </h1>
+            
+            <p class="reveal text-lg sm:text-xl text-[var(--fg-secondary)] max-w-2xl mx-auto mb-10" style="transition-delay: 0.3s;">
+              Identify and neutralize security threats before they become breaches. 
+              Comprehensive scanning for SQL injection, XSS, CSRF, and more.
+            </p>
+            
+            <div class="reveal flex flex-col sm:flex-row gap-4 justify-center" style="transition-delay: 0.4s;">
+              <button class="btn-primary text-lg" onclick="showPage('scan')">
+                Start Scanning
+              </button>
+              <button class="btn-secondary text-lg" onclick="showPage('about')">
+                Learn More
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Features Section -->
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-20">
+        <div class="reveal text-center mb-16">
+          <h2 class="text-3xl sm:text-4xl font-bold mb-4">Detection Capabilities</h2>
+          <p class="text-[var(--fg-secondary)] max-w-2xl mx-auto">Our multi-layered scanning engine identifies the most critical web vulnerabilities</p>
+        </div>
+        
+        <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div class="reveal card feature-card" style="transition-delay: 0.1s;">
+            <div class="feature-icon">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2">
+                <path d="M4 7V4h16v3"/>
+                <path d="M9 20h6"/>
+                <path d="M12 4v16"/>
+              </svg>
+            </div>
+            <h3 class="text-lg font-semibold mb-2">SQL Injection Detection</h3>
+            <p class="text-[var(--fg-secondary)] text-sm">Identify database manipulation vulnerabilities that could expose sensitive data.</p>
+          </div>
+
+          <div class="reveal card feature-card" style="transition-delay: 0.15s;">
+            <div class="feature-icon">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2">
+                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+              </svg>
+            </div>
+            <h3 class="text-lg font-semibold mb-2">XSS Prevention</h3>
+            <p class="text-[var(--fg-secondary)] text-sm">Detect cross-site scripting vulnerabilities that compromise user sessions.</p>
+          </div>
+
+          <div class="reveal card feature-card" style="transition-delay: 0.2s;">
+            <div class="feature-icon">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2">
+                <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+                <path d="M7 11V7a5 5 0 0110 0v4"/>
+              </svg>
+            </div>
+            <h3 class="text-lg font-semibold mb-2">CSRF Analysis</h3>
+            <p class="text-[var(--fg-secondary)] text-sm">Find cross-site request forgery vulnerabilities that enable unauthorized actions.</p>
+          </div>
+
+          <div class="reveal card feature-card" style="transition-delay: 0.25s;">
+            <div class="feature-icon">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2">
+                <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>
+                <path d="M14 2v6h6"/>
+                <path d="M16 13H8"/>
+                <path d="M16 17H8"/>
+                <path d="M10 9H8"/>
+              </svg>
+            </div>
+            <h3 class="text-lg font-semibold mb-2">Security Headers</h3>
+            <p class="text-[var(--fg-secondary)] text-sm">Verify proper implementation of HTTP security headers and policies.</p>
+          </div>
+
+          <div class="reveal card feature-card" style="transition-delay: 0.3s;">
+            <div class="feature-icon">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2">
+                <circle cx="12" cy="12" r="10"/>
+                <path d="M12 6v6l4 2"/>
+              </svg>
+            </div>
+            <h3 class="text-lg font-semibold mb-2">Real-time Scanning</h3>
+            <p class="text-[var(--fg-secondary)] text-sm">Instant vulnerability detection with live progress tracking and reporting.</p>
+          </div>
+
+          <div class="reveal card feature-card" style="transition-delay: 0.35s;">
+            <div class="feature-icon">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2">
+                <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
+                <polyline points="17 8 12 3 7 8"/>
+                <line x1="12" y1="3" x2="12" y2="15"/>
+              </svg>
+            </div>
+            <h3 class="text-lg font-semibold mb-2">File Upload Analysis</h3>
+            <p class="text-[var(--fg-secondary)] text-sm">Detect insecure file upload mechanisms that could allow remote code execution.</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Stats Section -->
+      <div class="border-y border-[var(--border)] bg-[rgba(0,0,0,0.2)]">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
+          <div class="grid grid-cols-2 lg:grid-cols-4 gap-8">
+            <div class="reveal stat-card" style="transition-delay: 0.1s;">
+              <div class="stat-value">100%</div>
+              <div class="text-[var(--fg-secondary)] mt-2">Secure Scanning</div>
+            </div>
+            <div class="reveal stat-card" style="transition-delay: 0.15s;">
+              <div class="stat-value">&lt;30s</div>
+              <div class="text-[var(--fg-secondary)] mt-2">Average Scan Time</div>
+            </div>
+            <div class="reveal stat-card" style="transition-delay: 0.2s;">
+              <div class="stat-value">5+</div>
+              <div class="text-[var(--fg-secondary)] mt-2">Vulnerability Types</div>
+            </div>
+            <div class="reveal stat-card" style="transition-delay: 0.25s;">
+              <div class="stat-value">24/7</div>
+              <div class="text-[var(--fg-secondary)] mt-2">Monitoring</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- CTA Section -->
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-24">
+        <div class="reveal card text-center py-16 px-8 relative overflow-hidden">
+          <div class="absolute inset-0 bg-gradient-to-r from-[rgba(0,217,255,0.1)] to-[rgba(8,145,178,0.05)]"></div>
+          <div class="relative z-10">
+            <h2 class="text-3xl sm:text-4xl font-bold mb-4">Ready to Secure Your Application?</h2>
+            <p class="text-[var(--fg-secondary)] max-w-xl mx-auto mb-8">Start your first vulnerability scan today and identify security risks before attackers do.</p>
+            <button class="btn-primary text-lg" onclick="showPage('scan')">Start Your First Scan</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Footer -->
+      <footer class="border-t border-[var(--border)] py-8">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center text-[var(--fg-muted)] text-sm">
+          <p>2024 VulnScan. All rights reserved. Built for security professionals.</p>
+        </div>
+      </footer>
+    </section>
+
+    <!-- SCAN PAGE -->
+    <section id="page-scan" class="page">
+      <div class="min-h-[calc(100vh-4rem)] py-12">
+        <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div class="reveal text-center mb-12">
+            <h1 class="text-3xl sm:text-4xl font-bold mb-4">Vulnerability Scanner</h1>
+            <p class="text-[var(--fg-secondary)]">Enter a URL to scan for security vulnerabilities</p>
+          </div>
+
+          <div class="reveal card p-8" style="transition-delay: 0.1s;">
+            <div class="mb-6">
+              <label class="block text-sm font-medium mb-2">Target URL</label>
+              <input type="url" id="scanUrl" class="input-field" placeholder="https://example.com">
+            </div>
+
+            <div class="mb-6">
+              <label class="block text-sm font-medium mb-2">Scan Type</label>
+              <div class="flex">
+                <button class="scan-type-tab active" data-type="quick" onclick="selectScanType('quick')">
+                  <div class="font-semibold">Quick Scan</div>
+                  <div class="text-xs opacity-70">Basic vulnerability checks (~30 seconds)</div>
+                </button>
+                <button class="scan-type-tab" data-type="full" onclick="selectScanType('full')">
+                  <div class="font-semibold">Full Scan</div>
+                  <div class="text-xs opacity-70">Comprehensive security analysis (~2 minutes)</div>
+                </button>
+              </div>
+            </div>
+
+            <button class="btn-primary w-full text-lg" onclick="startScan()">Start Scan</button>
+          </div>
+
+          <!-- Recent Scans -->
+          <div class="reveal mt-8" style="transition-delay: 0.2s;">
+            <h3 class="text-lg font-semibold mb-4">Recent Scans</h3>
+            <div id="recentScans" class="space-y-2">
+              <div class="text-[var(--fg-muted)] text-sm py-4 text-center border border-dashed border-[var(--border)] rounded-lg">
+                No recent scans. Start your first scan above.
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- DASHBOARD PAGE -->
+    <section id="page-dashboard" class="page">
+      <div class="min-h-[calc(100vh-4rem)] py-12">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div class="reveal mb-8">
+            <h1 class="text-3xl sm:text-4xl font-bold mb-2">Security Dashboard</h1>
+            <p class="text-[var(--fg-secondary)]">View your scan history and vulnerability reports</p>
+          </div>
+
+          <!-- Stats Grid -->
+          <div class="grid grid-cols-2 lg:grid-cols-5 gap-4 mb-8">
+            <div class="reveal card stat-card" style="transition-delay: 0.1s;">
+              <div class="stat-value" id="totalScans">0</div>
+              <div class="text-[var(--fg-secondary)] text-sm mt-1">Total Scans</div>
+            </div>
+            <div class="reveal card stat-card" style="transition-delay: 0.15s;">
+              <div class="stat-value text-[var(--danger)]" id="totalVulns">0</div>
+              <div class="text-[var(--fg-secondary)] text-sm mt-1">Vulnerabilities</div>
+            </div>
+            <div class="reveal card stat-card" style="transition-delay: 0.2s;">
+              <div class="stat-value text-[var(--danger)]" id="highRisk">0</div>
+              <div class="text-[var(--fg-secondary)] text-sm mt-1">High Risk</div>
+            </div>
+            <div class="reveal card stat-card" style="transition-delay: 0.25s;">
+              <div class="stat-value text-[var(--warning)]" id="mediumRisk">0</div>
+              <div class="text-[var(--fg-secondary)] text-sm mt-1">Medium Risk</div>
+            </div>
+            <div class="reveal card stat-card" style="transition-delay: 0.3s;">
+              <div class="stat-value text-[var(--success)]" id="lowRisk">0</div>
+              <div class="text-[var(--fg-secondary)] text-sm mt-1">Low Risk</div>
+            </div>
+          </div>
+
+          <div class="grid lg:grid-cols-2 gap-8">
+            <!-- Scan History -->
+            <div class="reveal card" style="transition-delay: 0.35s;">
+              <h3 class="text-lg font-semibold mb-4 flex items-center gap-2">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2">
+                  <circle cx="12" cy="12" r="10"/>
+                  <polyline points="12 6 12 12 16 14"/>
+                </svg>
+                Scan History
+              </h3>
+              <div id="scanHistory" class="space-y-2 max-h-96 overflow-y-auto">
+                <div class="text-[var(--fg-muted)] text-sm py-8 text-center">
+                  No scans yet. Start your first scan.
+                </div>
+              </div>
+            </div>
+
+            <!-- Vulnerability Details -->
+            <div class="reveal card" style="transition-delay: 0.4s;">
+              <h3 class="text-lg font-semibold mb-4 flex items-center gap-2">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2">
+                  <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                </svg>
+                Vulnerability Details
+              </h3>
+              <div id="vulnDetails" class="space-y-2 max-h-96 overflow-y-auto">
+                <div class="text-[var(--fg-muted)] text-sm py-8 text-center">
+                  Select a scan to view details
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ABOUT PAGE -->
+    <section id="page-about" class="page">
+      <div class="min-h-[calc(100vh-4rem)] py-12">
+        <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div class="reveal text-center mb-12">
+            <h1 class="text-3xl sm:text-4xl font-bold mb-4">About VulnScan</h1>
+            <p class="text-[var(--fg-secondary)] max-w-2xl mx-auto">A comprehensive web application security scanner designed to identify vulnerabilities before they can be exploited.</p>
+          </div>
+
+          <!-- Project Overview -->
+          <div class="reveal card mb-8" style="transition-delay: 0.1s;">
+            <h2 class="text-xl font-semibold mb-4 flex items-center gap-2">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2">
+                <circle cx="12" cy="12" r="10"/>
+                <path d="M12 16v-4"/>
+                <path d="M12 8h.01"/>
+              </svg>
+              Project Overview
+            </h2>
+            <p class="text-[var(--fg-secondary)] leading-relaxed">VulnScan is an advanced security analysis platform that helps developers and security professionals identify vulnerabilities in web applications. Our scanning engine employs multiple detection techniques to provide comprehensive coverage of common security issues.</p>
+          </div>
+
+          <!-- Key Features -->
+          <div class="reveal card mb-8" style="transition-delay: 0.15s;">
+            <h2 class="text-xl font-semibold mb-6">Key Features</h2>
+            <div class="grid sm:grid-cols-2 gap-4">
+              <div class="flex items-start gap-3">
+                <div class="w-10 h-10 rounded-lg bg-[rgba(0,217,255,0.1)] flex items-center justify-center flex-shrink-0">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2">
+                    <path d="M4 7V4h16v3"/><path d="M9 20h6"/><path d="M12 4v16"/>
+                  </svg>
+                </div>
+                <div>
+                  <div class="font-medium">SQL Injection Detection</div>
+                  <div class="text-sm text-[var(--fg-secondary)]">Identify database vulnerabilities</div>
+                </div>
+              </div>
+              <div class="flex items-start gap-3">
+                <div class="w-10 h-10 rounded-lg bg-[rgba(0,217,255,0.1)] flex items-center justify-center flex-shrink-0">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2">
+                    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                  </svg>
+                </div>
+                <div>
+                  <div class="font-medium">XSS Prevention</div>
+                  <div class="text-sm text-[var(--fg-secondary)]">Cross-site scripting analysis</div>
+                </div>
+              </div>
+              <div class="flex items-start gap-3">
+                <div class="w-10 h-10 rounded-lg bg-[rgba(0,217,255,0.1)] flex items-center justify-center flex-shrink-0">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2">
+                    <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+                    <path d="M7 11V7a5 5 0 0110 0v4"/>
+                  </svg>
+                </div>
+                <div>
+                  <div class="font-medium">CSRF Analysis</div>
+                  <div class="text-sm text-[var(--fg-secondary)]">Request forgery detection</div>
+                </div>
+              </div>
+              <div class="flex items-start gap-3">
+                <div class="w-10 h-10 rounded-lg bg-[rgba(0,217,255,0.1)] flex items-center justify-center flex-shrink-0">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2">
+                    <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>
+                    <path d="M14 2v6h6"/>
+                  </svg>
+                </div>
+                <div>
+                  <div class="font-medium">Security Headers</div>
+                  <div class="text-sm text-[var(--fg-secondary)]">HTTP header verification</div>
+                </div>
+              </div>
+              <div class="flex items-start gap-3">
+                <div class="w-10 h-10 rounded-lg bg-[rgba(0,217,255,0.1)] flex items-center justify-center flex-shrink-0">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2">
+                    <circle cx="12" cy="12" r="10"/>
+                    <path d="M12 6v6l4 2"/>
+                  </svg>
+                </div>
+                <div>
+                  <div class="font-medium">Real-time Scanning</div>
+                  <div class="text-sm text-[var(--fg-secondary)]">Live progress tracking</div>
+                </div>
+              </div>
+              <div class="flex items-start gap-3">
+                <div class="w-10 h-10 rounded-lg bg-[rgba(0,217,255,0.1)] flex items-center justify-center flex-shrink-0">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2">
+                    <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
+                    <polyline points="17 8 12 3 7 8"/>
+                    <line x1="12" y1="3" x2="12" y2="15"/>
+                  </svg>
+                </div>
+                <div>
+                  <div class="font-medium">File Upload Analysis</div>
+                  <div class="text-sm text-[var(--fg-secondary)]">Upload security checks</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Technical Architecture -->
+          <div class="reveal card mb-8" style="transition-delay: 0.2s;">
+            <h2 class="text-xl font-semibold mb-4">Technical Architecture</h2>
+            <div class="grid sm:grid-cols-3 gap-6">
+              <div class="text-center p-4 rounded-lg bg-[rgba(0,0,0,0.2)]">
+                <div class="text-[var(--accent)] font-semibold mb-2">Frontend</div>
+                <div class="text-sm text-[var(--fg-secondary)]">HTML5, CSS3, JavaScript with modern responsive design</div>
+              </div>
+              <div class="text-center p-4 rounded-lg bg-[rgba(0,0,0,0.2)]">
+                <div class="text-[var(--accent)] font-semibold mb-2">Backend</div>
+                <div class="text-sm text-[var(--fg-secondary)]">Python Flask with RESTful API architecture</div>
+              </div>
+              <div class="text-center p-4 rounded-lg bg-[rgba(0,0,0,0.2)]">
+                <div class="text-[var(--accent)] font-semibold mb-2">Database</div>
+                <div class="text-sm text-[var(--fg-secondary)]">SQLite for scan results and user data storage</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Vulnerability Types -->
+          <div class="reveal card mb-8" style="transition-delay: 0.25s;">
+            <h2 class="text-xl font-semibold mb-4">Vulnerability Detection</h2>
+            <div class="space-y-3">
+              <div class="flex items-center gap-3 p-3 rounded-lg bg-[rgba(0,0,0,0.2)]">
+                <span class="w-3 h-3 rounded-full bg-[var(--danger)]"></span>
+                <span>SQL Injection</span>
+              </div>
+              <div class="flex items-center gap-3 p-3 rounded-lg bg-[rgba(0,0,0,0.2)]">
+                <span class="w-3 h-3 rounded-full bg-[var(--danger)]"></span>
+                <span>Cross-Site Scripting (XSS)</span>
+              </div>
+              <div class="flex items-center gap-3 p-3 rounded-lg bg-[rgba(0,0,0,0.2)]">
+                <span class="w-3 h-3 rounded-full bg-[var(--warning)]"></span>
+                <span>Cross-Site Request Forgery (CSRF)</span>
+              </div>
+              <div class="flex items-center gap-3 p-3 rounded-lg bg-[rgba(0,0,0,0.2)]">
+                <span class="w-3 h-3 rounded-full bg-[var(--warning)]"></span>
+                <span>Security Headers Misconfiguration</span>
+              </div>
+              <div class="flex items-center gap-3 p-3 rounded-lg bg-[rgba(0,0,0,0.2)]">
+                <span class="w-3 h-3 rounded-full bg-[var(--success)]"></span>
+                <span>Insecure File Upload</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Security & Privacy -->
+          <div class="reveal card" style="transition-delay: 0.3s;">
+            <h2 class="text-xl font-semibold mb-4">Security & Privacy</h2>
+            <ul class="space-y-2 text-[var(--fg-secondary)]">
+              <li class="flex items-center gap-2">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--success)" stroke-width="2">
+                  <polyline points="20 6 9 17 4 12"/>
+                </svg>
+                All scan data is encrypted at rest and in transit
+              </li>
+              <li class="flex items-center gap-2">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--success)" stroke-width="2">
+                  <polyline points="20 6 9 17 4 12"/>
+                </svg>
+                User credentials are securely hashed using bcrypt
+              </li>
+              <li class="flex items-center gap-2">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--success)" stroke-width="2">
+                  <polyline points="20 6 9 17 4 12"/>
+                </svg>
+                No target URL data is stored longer than necessary
+              </li>
+              <li class="flex items-center gap-2">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--success)" stroke-width="2">
+                  <polyline points="20 6 9 17 4 12"/>
+                </svg>
+                Regular security audits of the platform
+              </li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- SIGN IN PAGE -->
+    <section id="page-signin" class="page">
+      <div class="min-h-[calc(100vh-4rem)] flex">
+        <!-- Left Panel -->
+        <div class="hidden lg:flex lg:w-1/2 flex-col justify-center px-16 py-12 relative overflow-hidden">
+          <div class="absolute inset-0 bg-gradient-to-br from-[rgba(0,217,255,0.1)] to-transparent"></div>
+          <div class="relative z-10">
+            <div class="flex items-center gap-3 mb-8">
+              <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2">
+                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                <path d="M9 12l2 2 4-4"/>
+              </svg>
+              <span class="text-2xl font-bold">VulnScan</span>
+            </div>
+            <h2 class="text-3xl font-bold mb-4">Secure Your Web Applications</h2>
+            <p class="text-[var(--fg-secondary)] mb-8">Advanced vulnerability detection system for modern web applications.</p>
+            <ul class="space-y-3">
+              <li class="flex items-center gap-3 text-[var(--fg-secondary)]">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2">
+                  <polyline points="20 6 9 17 4 12"/>
+                </svg>
+                Real-time vulnerability scanning
+              </li>
+              <li class="flex items-center gap-3 text-[var(--fg-secondary)]">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2">
+                  <polyline points="20 6 9 17 4 12"/>
+                </svg>
+                Comprehensive security reports
+              </li>
+              <li class="flex items-center gap-3 text-[var(--fg-secondary)]">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2">
+                  <polyline points="20 6 9 17 4 12"/>
+                </svg>
+                Risk level classification
+              </li>
+            </ul>
+          </div>
+        </div>
+
+        <!-- Right Panel - Form -->
+        <div class="w-full lg:w-1/2 flex items-center justify-center px-6 py-12 bg-[var(--bg-secondary)]">
+          <div class="w-full max-w-md">
+            <div class="form-card">
+              <h2 class="text-2xl font-bold text-[var(--bg-primary)] mb-2">Welcome Back</h2>
+              <p class="text-gray-500 mb-6">Sign in to continue to your dashboard</p>
+              
+              <form id="signinForm" onsubmit="handleSignIn(event)">
+                <div class="mb-4">
+                  <label class="block text-sm font-medium text-gray-700 mb-2">Email</label>
+                  <input type="email" class="input-field" placeholder="you@example.com" required>
+                </div>
+                <div class="mb-6">
+                  <label class="block text-sm font-medium text-gray-700 mb-2">Password</label>
+                  <input type="password" class="input-field" placeholder="Enter your password" required>
+                </div>
+                <button type="submit" class="btn-primary w-full mb-4">Sign In</button>
+              </form>
+              
+              <p class="text-center text-gray-500 text-sm">
+                Don't have an account? 
+                <a href="#" class="text-[var(--accent-dim)] hover:underline" onclick="showPage('signup')">Sign up</a>
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- SIGN UP PAGE -->
+    <section id="page-signup" class="page">
+      <div class="min-h-[calc(100vh-4rem)] flex">
+        <!-- Left Panel -->
+        <div class="hidden lg:flex lg:w-1/2 flex-col justify-center px-16 py-12 relative overflow-hidden">
+          <div class="absolute inset-0 bg-gradient-to-br from-[rgba(0,217,255,0.1)] to-transparent"></div>
+          <div class="relative z-10">
+            <div class="flex items-center gap-3 mb-8">
+              <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2">
+                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                <path d="M9 12l2 2 4-4"/>
+              </svg>
+              <span class="text-2xl font-bold">VulnScan</span>
+            </div>
+            <h2 class="text-3xl font-bold mb-4">Join the Security Revolution</h2>
+            <p class="text-[var(--fg-secondary)] mb-8">Start protecting your web applications with our advanced vulnerability detection system.</p>
+            <ul class="space-y-3">
+              <li class="flex items-center gap-3 text-[var(--fg-secondary)]">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2">
+                  <polyline points="20 6 9 17 4 12"/>
+                </svg>
+                Detect SQL injection vulnerabilities
+              </li>
+              <li class="flex items-center gap-3 text-[var(--fg-secondary)]">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2">
+                  <polyline points="20 6 9 17 4 12"/>
+                </svg>
+                Identify XSS attack vectors
+              </li>
+              <li class="flex items-center gap-3 text-[var(--fg-secondary)]">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2">
+                  <polyline points="20 6 9 17 4 12"/>
+                </svg>
+                Check security headers & CSRF
+              </li>
+            </ul>
+          </div>
+        </div>
+
+        <!-- Right Panel - Form -->
+        <div class="w-full lg:w-1/2 flex items-center justify-center px-6 py-12 bg-[var(--bg-secondary)]">
+          <div class="w-full max-w-md">
+            <div class="form-card">
+              <h2 class="text-2xl font-bold text-[var(--bg-primary)] mb-2">Create Account</h2>
+              <p class="text-gray-500 mb-6">Start securing your applications today</p>
+              
+              <form id="signupForm" onsubmit="handleSignUp(event)">
+                <div class="mb-4">
+                  <label class="block text-sm font-medium text-gray-700 mb-2">Full Name</label>
+                  <input type="text" id="signupName" class="input-field" placeholder="John Doe" required>
+                </div>
+                <div class="mb-4">
+                  <label class="block text-sm font-medium text-gray-700 mb-2">Email</label>
+                  <input type="email" id="signupEmail" class="input-field" placeholder="you@example.com" required>
+                </div>
+                <div class="mb-6">
+                  <label class="block text-sm font-medium text-gray-700 mb-2">Password</label>
+                  <input type="password" id="signupPassword" class="input-field" placeholder="Create a strong password" required minlength="8">
+                </div>
+                <button type="submit" class="btn-primary w-full mb-4">Create Account</button>
+              </form>
+              
+              <p class="text-center text-gray-500 text-sm">
+                Already have an account? 
+                <a href="#" class="text-[var(--accent-dim)] hover:underline" onclick="showPage('signin')">Sign in</a>
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- Scanning Animation Overlay -->
+  <div class="scanning-animation" id="scanningOverlay">
+    <div class="scan-ring mb-8"></div>
+    <h3 class="text-2xl font-bold mb-2">Scanning Target</h3>
+    <p class="text-[var(--fg-secondary)] mb-4" id="scanningUrl">https://example.com</p>
+    <div class="w-64 progress-bar mb-2">
+      <div class="progress-fill" id="scanProgress" style="width: 0%"></div>
+    </div>
+    <p class="text-sm text-[var(--fg-muted)]" id="scanStatus">Initializing scan...</p>
+  </div>
+
+  <script>
+    // Application State
+    const state = {
+      currentPage: 'home',
+      isLoggedIn: false,
+      currentUser: null,
+      scanType: 'quick',
+      scans: [],
+      currentScan: null
+    };
+
+    // Vulnerability Database
+    const vulnerabilityTypes = [
+      { name: 'SQL Injection', severity: 'high', description: 'Potential SQL injection vulnerability detected in form parameters.' },
+      { name: 'Reflected XSS', severity: 'high', description: 'Cross-site scripting vulnerability found in search functionality.' },
+      { name: 'Stored XSS', severity: 'high', description: 'Stored XSS vulnerability detected in user input fields.' },
+      { name: 'CSRF Token Missing', severity: 'medium', description: 'Cross-site request forgery protection not implemented.' },
+      { name: 'Missing X-Frame-Options', severity: 'medium', description: 'Clickjacking protection header not present.' },
+      { name: 'Missing CSP Header', severity: 'medium', description: 'Content Security Policy header not configured.' },
+      { name: 'Insecure Cookies', severity: 'low', description: 'Cookies without HttpOnly or Secure flags detected.' },
+      { name: 'Information Disclosure', severity: 'low', description: 'Server version information exposed in headers.' },
+      { name: 'Directory Listing', severity: 'low', description: 'Directory listing enabled on server.' }
+    ];
+
+    // Initialize
+    document.addEventListener('DOMContentLoaded', () => {
+      initRevealAnimations();
+      checkAuthState();
+    });
+
+    // Reveal Animations with Intersection Observer
+    function initRevealAnimations() {
+      const observer = new IntersectionObserver((entries) => {
+        entries.forEach(entry => {
+          if (entry.isIntersecting) {
+            entry.target.classList.add('visible');
+          }
+        });
+      }, { threshold: 0.1, rootMargin: '0px 0px -50px 0px' });
+
+      document.querySelectorAll('.reveal').forEach(el => observer.observe(el));
+    }
+
+    // Page Navigation
+    function showPage(pageName) {
+      state.currentPage = pageName;
+      
+      document.querySelectorAll('.page').forEach(page => {
+        page.classList.remove('active');
+      });
+      
+      const targetPage = document.getElementById(`page-${pageName}`);
+      if (targetPage) {
+        targetPage.classList.add('active');
+      }
+
+      // Update nav links
+      document.querySelectorAll('.nav-link').forEach(link => {
+        link.classList.remove('active');
+        if (link.dataset.page === pageName) {
+          link.classList.add('active');
+        }
+      });
+
+      // Re-trigger reveal animations
+      setTimeout(() => {
+        document.querySelectorAll(`#page-${pageName} .reveal`).forEach(el => {
+          el.classList.remove('visible');
+          void el.offsetWidth; // Force reflow
+          el.classList.add('visible');
+        });
+      }, 100);
+
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    // Mobile Menu Toggle
+    function toggleMobileMenu() {
+      const navLinks = document.getElementById('navLinks');
+      navLinks.classList.toggle('open');
+    }
+
+    // Scan Type Selection
+    function selectScanType(type) {
+      state.scanType = type;
+      document.querySelectorAll('.scan-type-tab').forEach(tab => {
+        tab.classList.remove('active');
+        if (tab.dataset.type === type) {
+          tab.classList.add('active');
+        }
+      });
+    }
+
+    // Start Scan
+    function startScan() {
+      const urlInput = document.getElementById('scanUrl');
+      const url = urlInput.value.trim();
+
+      if (!url || !isValidUrl(url)) {
+        alert('Please enter a valid URL');
+        return;
+      }
+
+      const overlay = document.getElementById('scanningOverlay');
+      const progressBar = document.getElementById('scanProgress');
+      const statusText = document.getElementById('scanStatus');
+      const urlDisplay = document.getElementById('scanningUrl');
+
+      urlDisplay.textContent = url;
+      overlay.classList.add('active');
+
+      const duration = state.scanType === 'quick' ? 3000 : 6000;
+      const steps = state.scanType === 'quick' ? 5 : 8;
+      const stepDuration = duration / steps;
+      let currentStep = 0;
+
+      const statusMessages = state.scanType === 'quick' 
+        ? ['Initializing scan...', 'Checking HTTP headers...', 'Analyzing forms...', 'Testing parameters...', 'Generating report...']
+        : ['Initializing scan...', 'Checking HTTP headers...', 'Analyzing forms...', 'Testing parameters...', 'Scanning for SQL injection...', 'Testing XSS vectors...', 'Analyzing security policies...', 'Generating report...'];
+
+      const interval = setInterval(() => {
+        currentStep++;
+        const progress = (currentStep / steps) * 100;
+        progressBar.style.width = `${progress}%`;
+        statusText.textContent = statusMessages[Math.min(currentStep, statusMessages.length - 1)];
+
+        if (currentStep >= steps) {
+          clearInterval(interval);
+          setTimeout(() => {
+            overlay.classList.remove('active');
+            progressBar.style.width = '0%';
+            generateScanResults(url);
+          }, 500);
+        }
+      }, stepDuration);
+    }
+
+    // Generate Scan Results
+    function generateScanResults(url) {
+      const vulnCount = Math.floor(Math.random() * 5) + (state.scanType === 'full' ? 3 : 0);
+      const vulnerabilities = [];
+
+      for (let i = 0; i < vulnCount; i++) {
+        const randomVuln = vulnerabilityTypes[Math.floor(Math.random() * vulnerabilityTypes.length)];
+        if (!vulnerabilities.find(v => v.name === randomVuln.name)) {
+          vulnerabilities.push({ ...randomVuln });
+        }
+      }
+
+      const scan = {
+        id: Date.now(),
+        url: url,
+        type: state.scanType,
+        timestamp: new Date().toISOString(),
+        vulnerabilities: vulnerabilities,
+        highCount: vulnerabilities.filter(v => v.severity === 'high').length,
+        mediumCount: vulnerabilities.filter(v => v.severity === 'medium').length,
+        lowCount: vulnerabilities.filter(v => v.severity === 'low').length
+      };
+
+      state.scans.unshift(scan);
+      state.currentScan = scan;
+
+      updateDashboard();
+      updateRecentScans();
+
+      showPage('dashboard');
+
+      // Flash the new scan
+      setTimeout(() => {
+        const scanItems = document.querySelectorAll('.scan-item');
+        if (scanItems.length > 0) {
+          scanItems[0].style.background = 'rgba(0, 217, 255, 0.1)';
+          setTimeout(() => {
+            scanItems[0].style.background = '';
+          }, 2000);
+        }
+      }, 500);
+    }
+
+    // Update Dashboard Stats
+    function updateDashboard() {
+      const totalScans = state.scans.length;
+      const totalVulns = state.scans.reduce((sum, s) => sum + s.vulnerabilities.length, 0);
+      const highRisk = state.scans.reduce((sum, s) => sum + s.highCount, 0);
+      const mediumRisk = state.scans.reduce((sum, s) => sum + s.mediumCount, 0);
+      const lowRisk = state.scans.reduce((sum, s) => sum + s.lowCount, 0);
+
+      animateCounter('totalScans', totalScans);
+      animateCounter('totalVulns', totalVulns);
+      animateCounter('highRisk', highRisk);
+      animateCounter('mediumRisk', mediumRisk);
+      animateCounter('lowRisk', lowRisk);
+
+      updateScanHistory();
+    }
+
+    // Animate Counter
+    function animateCounter(elementId, target) {
+      const element = document.getElementById(elementId);
+      const duration = 500;
+      const start = parseInt(element.textContent) || 0;
+      const increment = (target - start) / (duration / 16);
+      let current = start;
+
+      const animate = () => {
+        current += increment;
+        if ((increment > 0 && current >= target) || (increment < 0 && current <= target)) {
+          element.textContent = target;
+        } else {
+          element.textContent = Math.round(current);
+          requestAnimationFrame(animate);
+        }
+      };
+
+      animate();
+    }
+
+    // Update Recent Scans
+    function updateRecentScans() {
+      const container = document.getElementById('recentScans');
+      
+      if (state.scans.length === 0) {
+        container.innerHTML = '<div class="text-[var(--fg-muted)] text-sm py-4 text-center border border-dashed border-[var(--border)] rounded-lg">No recent scans. Start your first scan above.</div>';
+        return;
+      }
+
+      container.innerHTML = state.scans.slice(0, 5).map(scan => `
+        <div class="vuln-item ${scan.vulnerabilities.length > 0 ? 'high' : 'low'} flex justify-between items-center cursor-pointer" onclick="viewScanDetails(${scan.id})">
+          <div>
+            <div class="font-mono text-sm">${scan.url}</div>
+            <div class="text-xs text-[var(--fg-muted)]">${new Date(scan.timestamp).toLocaleString()}</div>
+          </div>
+          <div class="text-right">
+            <div class="text-sm font-semibold">${scan.vulnerabilities.length} issues</div>
+            <div class="text-xs text-[var(--fg-muted)]">${scan.type === 'quick' ? 'Quick' : 'Full'} Scan</div>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    // Update Scan History
+    function updateScanHistory() {
+      const container = document.getElementById('scanHistory');
+      
+      if (state.scans.length === 0) {
+        container.innerHTML = '<div class="text-[var(--fg-muted)] text-sm py-8 text-center">No scans yet. Start your first scan.</div>';
+        return;
+      }
+
+      container.innerHTML = state.scans.map(scan => `
+        <div class="scan-item p-3 rounded-lg bg-[rgba(0,0,0,0.2)] cursor-pointer hover:bg-[rgba(0,0,0,0.4)] transition-all" onclick="viewScanDetails(${scan.id})">
+          <div class="flex justify-between items-start mb-2">
+            <span class="font-mono text-sm">${scan.url}</span>
+            <span class="text-xs px-2 py-1 rounded ${scan.type === 'quick' ? 'bg-[rgba(0,217,255,0.1)] text-[var(--accent)]' : 'bg-[rgba(16,185,129,0.1)] text-[var(--success)]'}">${scan.type === 'quick' ? 'Quick' : 'Full'}</span>
+          </div>
+          <div class="flex justify-between text-xs text-[var(--fg-muted)]">
+            <span>${new Date(scan.timestamp).toLocaleString()}</span>
+            <span>${scan.vulnerabilities.length} vulnerabilities</span>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    // View Scan Details
+    function viewScanDetails(scanId) {
+      const scan = state.scans.find(s => s.id === scanId);
+      if (!scan) return;
+
+      state.currentScan = scan;
+      const container = document.getElementById('vulnDetails');
+
+      if (scan.vulnerabilities.length === 0) {
+        container.innerHTML = `
+          <div class="text-center py-8">
+            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="var(--success)" stroke-width="2" class="mx-auto mb-4">
+              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+              <path d="M9 12l2 2 4-4"/>
+            </svg>
+            <div class="text-[var(--success)] font-semibold">No Vulnerabilities Found</div>
+            <div class="text-[var(--fg-muted)] text-sm mt-1">${scan.url} appears secure</div>
+          </div>
+        `;
+        return;
+      }
+
+      container.innerHTML = `
+        <div class="mb-4 text-sm text-[var(--fg-muted)]">
+          Results for <span class="font-mono text-[var(--fg-primary)]">${scan.url}</span>
+        </div>
+        ${scan.vulnerabilities.map(vuln => `
+          <div class="vuln-item ${vuln.severity}">
+            <div class="flex justify-between items-start mb-1">
+              <span class="font-medium">${vuln.name}</span>
+              <span class="text-xs px-2 py-1 rounded ${
+                vuln.severity === 'high' ? 'bg-[rgba(239,68,68,0.2)] text-[var(--danger)]' :
+                vuln.severity === 'medium' ? 'bg-[rgba(245,158,11,0.2)] text-[var(--warning)]' :
+                'bg-[rgba(16,185,129,0.2)] text-[var(--success)]'
+              }">${vuln.severity.toUpperCase()}</span>
+            </div>
+            <p class="text-sm text-[var(--fg-secondary)]">${vuln.description}</p>
+          </div>
+        `).join('')}
+      `;
+    }
+
+    // URL Validation
+    function isValidUrl(string) {
+      try {
+        new URL(string);
+        return true;
+      } catch (_) {
+        return false;
+      }
+    }
+
+    // Authentication
+    function checkAuthState() {
+      const savedUser = localStorage.getItem('vulnscan_user');
+      if (savedUser) {
+        state.isLoggedIn = true;
+        state.currentUser = JSON.parse(savedUser);
+        updateAuthUI();
+      }
+    }
+
+    function handleSignIn(e) {
+      e.preventDefault();
+      const form = e.target;
+      const email = form.querySelector('input[type="email"]').value;
+      const password = form.querySelector('input[type="password"]').value;
+
+      // Simulate authentication
+      state.isLoggedIn = true;
+      state.currentUser = { email: email, name: email.split('@')[0] };
+      localStorage.setItem('vulnscan_user', JSON.stringify(state.currentUser));
+      
+      updateAuthUI();
+      showPage('dashboard');
+    }
+
+    function handleSignUp(e) {
+      e.preventDefault();
+      const name = document.getElementById('signupName').value;
+      const email = document.getElementById('signupEmail').value;
+      const password = document.getElementById('signupPassword').value;
+
+      state.isLoggedIn = true;
+      state.currentUser = { email: email, name: name };
+      localStorage.setItem('vulnscan_user', JSON.stringify(state.currentUser));
+      
+      updateAuthUI();
+      showPage('dashboard');
+    }
+
+    function handleSignOut() {
+      state.isLoggedIn = false;
+      state.currentUser = null;
+      localStorage.removeItem('vulnscan_user');
+      updateAuthUI();
+      showPage('home');
+    }
+
+    function updateAuthUI() {
+      const authButtons = document.getElementById('authButtons');
+      const signOutBtn = document.getElementById('signOutBtn');
+
+      if (state.isLoggedIn) {
+        authButtons.classList.add('hidden');
+        signOutBtn.classList.remove('hidden');
+      } else {
+        authButtons.classList.remove('hidden');
+        signOutBtn.classList.add('hidden');
+      }
+    }
+  </script>
+</body>
+</html>
